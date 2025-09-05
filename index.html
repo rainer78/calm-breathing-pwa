@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Calm Breathing • WebXR PWA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Follow a gentle breathing rhythm with floating spheres in WebXR." />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(135deg, #0b1020 0%, #1a2332 50%, #2d3748 100%);
+      color: #e2e8f0;
+      overflow: hidden;
+      min-height: 100vh;
+    }
+
+    .landing-page { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 1000; transition: opacity .4s ease; padding: 16px; }
+    .landing-page.hidden { opacity: 0; pointer-events: none; }
+    .card { width: 100%; max-width: 520px; text-align: center; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 28px; backdrop-filter: blur(6px); }
+    .logo { width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; background: linear-gradient(45deg, #4299e1, #63b3ed); animation: breathe-logo 4s ease-in-out infinite; }
+    @keyframes breathe-logo { 0%,100% {transform: scale(1)} 50% {transform: scale(1.1)} }
+    h1 { font-size: 2.2rem; margin-bottom: 8px; background: linear-gradient(45deg, #4299e1, #63b3ed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .sub { color: #a0aec0; margin-bottom: 22px; }
+    .controls { margin: 18px 0 8px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    select, button { padding: 14px 16px; min-height: 46px; min-width: 140px; border-radius: 12px; font-size: 16px; cursor: pointer; border: 2px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e2e8f0; transition: all .2s ease; }
+    select:focus, button:focus { outline: 3px solid #4299e1; outline-offset: 2px; border-color: #4299e1; }
+    select:hover, button:hover { background: rgba(255,255,255,.14); }
+    .primary { width: 100%; margin-top: 10px; background: linear-gradient(45deg, #4299e1, #63b3ed); border: none; font-weight: 600; }
+    .install { display: none; margin-top: 14px; padding: 12px 16px; background: rgba(66,153,225,.12); border: 1px solid #4299e1; border-radius: 10px; }
+    .install.show { display: block; }
+    .hud { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 900; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+    .hud.active { opacity: 1; pointer-events: auto; }
+    .panel { background: rgba(0,0,0,.7); border: 1px solid rgba(255,255,255,.2); padding: 12px 16px; border-radius: 12px; min-width: 200px; }
+    .phase { color: #63b3ed; font-weight: 600; margin-bottom: 4px; }
+    .time { color: #a0aec0; font-size: .95rem; }
+    .group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .hud-btn { background: rgba(0,0,0,.7); border: 1px solid rgba(255,255,255,.22); color: #e2e8f0; padding: 10px 14px; border-radius: 10px; min-width: 44px; min-height: 44px; cursor: pointer; transition: all .2s ease; }
+    .hud-btn:hover { background: rgba(66,153,225,.25); border-color: #4299e1; }
+    .complete { position: fixed; inset: 0; display: grid; place-items: center; z-index: 1200; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+    .complete.show { opacity: 1; pointer-events: auto; }
+    .xr { position: fixed; inset: 0; opacity: 0; transition: opacity .4s ease; }
+    .xr.active { opacity: 1; }
+    @media (max-width: 620px) { .panel { min-width: 160px; } h1 { font-size: 1.9rem; } }
+  </style>
+</head>
+<body>
+  <section class="landing-page" id="landing">
+    <div class="card">
+      <div class="logo" aria-hidden="true">🫁</div>
+      <h1>Calm Breathing</h1>
+      <p class="sub">Follow a gentle rhythm in VR</p>
+      <div class="controls">
+        <div class="row">
+          <select id="mode" aria-label="Select breathing mode">
+            <option value="box">Box Breathing (4-4-4-4)</option>
+            <option value="478">4-7-8 Technique</option>
+          </select>
+          <select id="length" aria-label="Select session duration">
+            <option value="3">3 min</option>
+            <option value="5" selected>5 min</option>
+            <option value="10">10 min</option>
+            <option value="15">15 min</option>
+          </select>
+        </div>
+      </div>
+      <button id="start" class="primary" aria-label="Start breathing session">Start Breathing Session</button>
+      <div id="installBanner" class="install">
+        <div>Install Calm Breathing for the best experience.</div>
+        <div style="margin-top:8px; display:flex; gap:8px; justify-content:center;">
+          <button id="installBtn">Install App</button>
+          <button id="installLater">Later</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="hud" id="hud" aria-live="polite">
+    <div class="panel">
+      <div class="phase" id="phaseText">Preparing…</div>
+      <div class="time" id="timeText">Get ready</div>
+    </div>
+    <div class="group">
+      <button class="hud-btn" id="pauseBtn" aria-label="Pause">⏸️</button>
+      <button class="hud-btn" id="resetBtn" aria-label="Reset">🔄</button>
+      <button class="hud-btn" id="muteBtn" aria-label="Toggle audio">🔇</button>
+      <button class="hud-btn" id="exitVrBtn" aria-label="Exit VR" style="display:none;">👓</button>
+    </div>
+  </div>
+
+  <div class="complete" id="complete">
+    <div class="card" style="text-align:center;">
+      <h2 style="color:#63b3ed;margin-bottom:10px;">Session Complete</h2>
+      <p style="color:#a0aec0;margin-bottom:18px;">How do you feel?</p>
+      <div class="row" style="justify-content:center;">
+        <button id="restartBtn">Restart</button>
+        <button id="homeBtn">Back to Home</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="xr" id="xr">
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <a-scene id="scene" vr-mode-ui="enabled: true" background="color: #0b1020"
+             renderer="antialias: true; colorManagement: true; sortObjects: true"
+             loading-screen="enabled: false" embedded>
+      <a-assets></a-assets>
+      <a-light type="ambient" color="#1a365d" intensity="0.45"></a-light>
+      <a-light type="directional" position="2 4 5" color="#4299e1" intensity="0.35"></a-light>
+      <a-sky color="#0b1020"></a-sky>
+      <a-sphere id="s1" position="-2 1.5 -4" radius="0.5"
+                material="color: #4299e1; emissive: #1a365d; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+                animation__float="property: position; to: -2 2 -4; dur: 4000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+      <a-sphere id="s2" position="0 1.8 -5" radius="0.7"
+                material="color: #63b3ed; emissive: #1b3a64; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+                animation__float="property: position; to: 0 2.3 -5; dur: 5000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+      <a-sphere id="s3" position="2.5 1.2 -3.5" radius="0.4"
+                material="color: #7fb7ff; emissive: #1d3f6e; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+                animation__float="property: position; to: 2.5 1.7 -3.5; dur: 3500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+      <a-entity id="phaseBillboard" position="0 3 -4" look-at="#camera">
+        <a-plane width="2.0" height="0.5" color="#000000" opacity="0.5"></a-plane>
+        <a-text id="phaseLabel" value="Breathe" align="center" color="#e2e8f0" position="0 0 0.01"></a-text>
+      </a-entity>
+      <a-camera id="camera" position="0 1.6 0" wasd-controls="enabled: true" look-controls="enabled: true"></a-camera>
+    </a-scene>
+  </div>
+
+  <script>
+    if (window.AFRAME) {
+      AFRAME.registerComponent('look-at', {
+        schema: { default: '#camera' },
+        init: function () { this.target = null; },
+        tick: function () {
+          if (!this.target) {
+            const el = document.querySelector(this.data);
+            this.target = el && el.object3D;
+          }
+          if (this.target) this.el.object3D.lookAt(this.target.position);
+        }
+      });
+    }
+
+    class CalmBreathingApp {
+      constructor() {
+        this.state = { mode: 'box', durationMin: 5, currentPhase: 'prepare', isPaused: false, sessionActive: false, sessionDone: false, tPhase: 0, tSession: 0, tTotal: 0, last: 0, muted: (localStorage.getItem('cb_muted') === '1') };
+        this.patterns = { box: { inhale: 4, hold1: 4, exhale: 4, hold2: 4 }, '478': { inhale: 4, hold1: 7, exhale: 8 } };
+        this.ui = {
+          landing: document.getElementById('landing'), start: document.getElementById('start'),
+          mode: document.getElementById('mode'), length: document.getElementById('length'),
+          installBanner: document.getElementById('installBanner'), installBtn: document.getElementById('installBtn'), installLater: document.getElementById('installLater'),
+          hud: document.getElementById('hud'), phaseText: document.getElementById('phaseText'), timeText: document.getElementById('timeText'),
+          pauseBtn: document.getElementById('pauseBtn'), resetBtn: document.getElementById('resetBtn'), muteBtn: document.getElementById('muteBtn'), exitVrBtn: document.getElementById('exitVrBtn'),
+          complete: document.getElementById('complete'), restart: document.getElementById('restartBtn'), home: document.getElementById('homeBtn'),
+          xr: document.getElementById('xr'), scene: document.getElementById('scene'), pLabel: document.getElementById('phaseLabel'),
+          s1: document.getElementById('s1'), s2: document.getElementById('s2'), s3: document.getElementById('s3')
+        };
+        this.deferInstallPrompt = null;
+        this.bind(); this.registerSW(); this.wireInstallPrompt();
+      }
+      bind() {
+        this.ui.mode.addEventListener('change', e => this.state.mode = e.target.value);
+        this.ui.length.addEventListener('change', e => this.state.durationMin = parseInt(e.target.value, 10));
+        this.ui.start.addEventListener('click', () => this.startSession());
+        this.ui.pauseBtn.addEventListener('click', () => this.togglePause());
+        this.ui.resetBtn.addEventListener('click', () => this.resetSession());
+        this.ui.muteBtn.addEventListener('click', () => this.toggleMute());
+        this.ui.exitVrBtn.addEventListener('click', () => { const s = this.ui.scene; if (s && s.exitVR) s.exitVR(); });
+        this.ui.restart.addEventListener('click', () => this.startSession());
+        this.ui.home.addEventListener('click', () => this.goHome());
+        document.addEventListener('keydown', (e) => { if (!this.state.sessionActive) return;
+          if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
+          if (e.code === 'KeyR') { e.preventDefault(); this.resetSession(); }
+          if (e.code === 'Escape') { e.preventDefault(); this.goHome(); }
+        });
+        this.ui.scene.addEventListener('enter-vr', () => this.ui.exitVrBtn.style.display = 'block');
+        this.ui.scene.addEventListener('exit-vr', () => this.ui.exitVrBtn.style.display = 'none');
+      }
+      registerSW() { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').catch(console.error); } }
+      wireInstallPrompt() {
+        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); this.deferInstallPrompt = e; this.ui.installBanner.classList.add('show'); });
+        this.ui.installBtn.addEventListener('click', async () => { if (!this.deferInstallPrompt) return; this.deferInstallPrompt.prompt(); await this.deferInstallPrompt.userChoice; this.deferInstallPrompt = null; this.ui.installBanner.classList.remove('show'); });
+        this.ui.installLater.addEventListener('click', () => this.ui.installBanner.classList.remove('show'));
+        window.addEventListener('appinstalled', () => this.ui.installBanner.classList.remove('show'));
+      }
+      startSession() {
+        this.state.sessionActive = true; this.state.sessionDone = false; this.state.currentPhase = 'prepare';
+        this.state.tPhase = 0; this.state.tSession = 0; this.state.tTotal = this.state.durationMin * 60 * 1000;
+        this.state.isPaused = false; this.last = performance.now();
+        this.ui.landing.classList.add('hidden'); this.ui.xr.classList.add('active'); this.ui.hud.classList.add('active'); this.ui.complete.classList.remove('show');
+        this.updateHUD('Get Ready');
+        setTimeout(() => { if (!this.state.sessionActive) return; this.state.currentPhase = 'inhale'; this.state.tPhase = 0; this.last = performance.now(); this.loop(); }, 3000);
+      }
+      loop = () => {
+        if (!this.state.sessionActive) return; requestAnimationFrame(this.loop);
+        const now = performance.now(); const dt = now - this.last; this.last = now; if (this.state.isPaused || this.state.sessionDone) return;
+        this.state.tSession += dt; this.state.tPhase += dt;
+        if (this.state.tSession >= this.state.tTotal) { this.finish(); return; }
+        const pattern = this.patterns[this.state.mode]; const durSec = pattern[this.state.currentPhase]; const durMs = (durSec || 0) * 1000;
+        if (durMs > 0 && this.state.tPhase >= durMs) { this.nextPhase(); }
+        const intensity = durMs > 0 ? Math.min(this.state.tPhase / durMs, 1) : 1;
+        this.animateSpheres(intensity); this.updateHUD();
+      }
+      nextPhase() {
+        const phases = (this.state.mode === 'box') ? ['inhale', 'hold1', 'exhale', 'hold2'] : ['inhale', 'hold1', 'exhale'];
+        const idx = phases.indexOf(this.state.currentPhase); this.state.currentPhase = phases[(idx + 1) % phases.length]; this.state.tPhase = 0;
+      }
+      animateSpheres(intensity) {
+        const phase = this.state.currentPhase; let target = 1, emissive = 0.3;
+        if (phase === 'inhale') { target = 1 + 0.8 * intensity; emissive = 0.3 + 0.4 * intensity; }
+        else if (phase === 'hold1' || phase === 'hold2') { target = 1.8; emissive = 0.7; }
+        else if (phase === 'exhale') { target = 1.8 - 0.8 * intensity; emissive = 0.7 - 0.4 * intensity; }
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const apply = (el, factor) => { const s = el.object3D.scale; const goal = target * factor; const nx = lerp(s.x, goal, 0.15); s.set(nx, nx, nx); el.setAttribute('material', `emissiveIntensity: ${emissive}`); };
+        apply(this.ui.s1, 0.9); apply(this.ui.s2, 1.0); apply(this.ui.s3, 1.1);
+        const label = ({ prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' })[phase] || 'Breathe';
+        this.ui.pLabel && this.ui.pLabel.setAttribute('value', label);
+      }
+      updateHUD(prepText) {
+        if (prepText) { this.ui.phaseText.textContent = 'Preparing'; this.ui.timeText.textContent = prepText; return; }
+        const label = ({ prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' })[this.state.currentPhase] || 'Breathe';
+        this.ui.phaseText.textContent = label;
+        const remain = Math.max(0, this.state.tTotal - this.state.tSession); const m = Math.floor(remain / 60000); const s = Math.floor((remain % 60000) / 1000).toString().padStart(2, '0');
+        this.ui.timeText.textContent = `${m}:${s} remaining`;
+      }
+      togglePause() { this.state.isPaused = !this.state.isPaused; this.ui.pauseBtn.textContent = this.state.isPaused ? '▶️' : '⏸️'; if (!this.state.isPaused) this.last = performance.now(); }
+      toggleMute() { this.state.muted = !this.state.muted; localStorage.setItem('cb_muted', this.state.muted ? '1' : '0'); this.ui.muteBtn.textContent = this.state.muted ? '🔇' : '🔊'; }
+      resetSession() { this.state.sessionActive = false; this.state.sessionDone = false; this.goHome(); }
+      finish() { this.state.sessionDone = true; this.state.sessionActive = false; this.ui.complete.classList.add('show'); }
+      goHome() {
+        this.ui.hud.classList.remove('active'); this.ui.xr.classList.remove('active'); this.ui.complete.classList.remove('show'); this.ui.landing.classList.remove('hidden');
+        ['s1','s2','s3'].forEach(id => { const el = this.ui[id]; if (!el) return; el.object3D.scale.set(1,1,1); el.setAttribute('material', 'emissiveIntensity: 0.3'); });
+        this.ui.phaseText.textContent = 'Preparing…'; this.ui.timeText.textContent = 'Get ready';
+      }
+    }
+    window.addEventListener('DOMContentLoaded', () => { new CalmBreathingApp(); });
+  </script>
+</body>
+</html>
