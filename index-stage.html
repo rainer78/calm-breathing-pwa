@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Breath-Reactive WebXR (Fixed)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body{height:100%;margin:0;background:#000;color:#fff;font-family:system-ui,Arial}
+    #ui{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none}
+    #start{pointer-events:auto;padding:12px 18px;font-size:16px;border:0;border-radius:8px;cursor:pointer}
+    #log{position:fixed;left:8px;bottom:8px;font:12px/1.4 monospace;opacity:.8;max-width:60ch;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+<div id="ui"><button id="start">Start</button></div>
+<pre id="log"></pre>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { VRButton } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/VRButton.js';
+
+const logEl = document.getElementById('log');
+function log(msg){ console.log(msg); logEl.textContent = String(msg); }
+
+let micStarted = false;
+let breath = 0, ema = 0;
+
+async function initMic(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    const src = ac.createMediaStreamSource(stream);
+    const analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    function sample(){
+      try{
+        analyser.getFloatTimeDomainData(buf);
+        let sum = 0; for (let i=0;i<buf.length;i++){ const v = buf[i]; sum += v*v; }
+        const rms = Math.sqrt(sum / buf.length);
+        ema = 0.92*ema + 0.08*rms;
+        breath = Math.min(1, Math.max(0, (ema - 0.02) * 18.0));
+      }catch(e){ log(e.message||e); }
+      setTimeout(sample, 16);
+    }
+    // Resume on user gesture if suspended
+    if (ac.state === 'suspended'){
+      await ac.resume();
+    }
+    sample();
+    micStarted = true;
+    log('Mic OK');
+  }catch(e){
+    log('Mic unavailable: ' + (e.message||e));
+  }
+}
+
+// --- Three.js scene ---
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1120);
+scene.fog = new THREE.FogExp2(0x0a1120, 0.04);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 1.6, 2);
+
+// Lights
+scene.add(new THREE.HemisphereLight(0x99bbff, 0x223344, 0.8));
+const key = new THREE.DirectionalLight(0xffffff, 0.6);
+key.position.set(3,4,2);
+scene.add(key);
+
+// Visible ground and a few columns so you know it is rendering
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color:0x0e1a2b, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+const colMat = new THREE.MeshStandardMaterial({ color:0x3b82f6, metalness:0.1, roughness:0.6 });
+for (let i=0;i<24;i++){
+  const h = 0.5 + Math.random()*1.2;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,h,24), colMat);
+  const r = 2.2 + Math.random()*2.8;
+  const a = i/24 * Math.PI*2;
+  m.position.set(Math.cos(a)*r, h*0.5, Math.sin(a)*r);
+  scene.add(m);
+}
+
+// Breath-reactive disk
+const uniforms = { uBreath:{ value:0 }, uTime:{ value:0 } };
+const disk = new THREE.Mesh(
+  new THREE.CircleGeometry(0.7, 64),
+  new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform float uBreath; varying vec2 vUv;
+      void main(){
+        float d = length(vUv-0.5);
+        float ring = smoothstep(0.38+0.18*uBreath, 0.36+0.18*uBreath, d);
+        vec3 base = mix(vec3(0.06,0.12,0.24), vec3(0.22,0.46,0.92), uBreath);
+        gl_FragColor = vec4(base + ring*0.35, 1.0);
+      }`
+  })
+);
+disk.position.set(0, 1.4, -1.2);
+scene.add(disk);
+
+// Resize
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// Animation
+renderer.setAnimationLoop(()=>{
+  uniforms.uBreath.value += (breath - uniforms.uBreath.value) * 0.05;
+
+  // World tint reacts to breath
+  const l = 0.12 + 0.10*uniforms.uBreath.value;
+  const fogC = new THREE.Color().setHSL(0.58, 0.5, l);
+  scene.fog.color.copy(fogC);
+  scene.background.copy(fogC);
+
+  renderer.render(scene, camera);
+});
+
+// UI start to satisfy gesture-gated audio
+document.getElementById('start').addEventListener('click', async ()=>{
+  document.getElementById('ui').style.display = 'none';
+  try{ await initMic(); }catch(e){ log(e.message||e); }
+});
+
+// Quick env checks
+if (location.protocol !== 'https:' && location.hostname !== 'localhost'){
+  log('Tip: serve over HTTPS for mic and WebXR.');
+}
+if (!navigator.xr){
+  log('WebXR not available. You can still view the flat scene.');
+}
+</script>
+</body>
+</html>
+
