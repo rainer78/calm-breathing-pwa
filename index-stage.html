@@ -18,21 +18,27 @@
       overflow: hidden;
       min-height: 100vh;
     }
+
     .landing-page { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 1000; transition: opacity .4s ease; padding: 16px; }
     .landing-page.hidden { opacity: 0; pointer-events: none; }
-    .card { width: 100%; max-width: 520px; text-align: center; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 28px; backdrop-filter: blur(6px); }
+    .card { width: 100%; max-width: 560px; text-align: center; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 28px; backdrop-filter: blur(6px); }
     .logo { width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; background: linear-gradient(45deg, #4299e1, #63b3ed); animation: breathe-logo 4s ease-in-out infinite; }
     @keyframes breathe-logo { 0%,100% {transform: scale(1)} 50% {transform: scale(1.1)} }
     h1 { font-size: 2.2rem; margin-bottom: 8px; background: linear-gradient(45deg, #4299e1, #63b3ed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .sub { color: #a0aec0; margin-bottom: 22px; }
     .controls { margin: 18px 0 8px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-    select, button { padding: 14px 16px; min-height: 46px; min-width: 140px; border-radius: 12px; font-size: 16px; cursor: pointer; border: 2px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e2e8f0; transition: all .2s ease; }
-    select:focus, button:focus { outline: 3px solid #4299e1; outline-offset: 2px; border-color: #4299e1; }
-    select:hover, button:hover { background: rgba(255,255,255,.14); }
+    .row.small { gap: 10px; align-items: center; }
+    .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+    select, button, input[type="checkbox"] { padding: 14px 16px; min-height: 46px; min-width: 140px; border-radius: 12px; font-size: 16px; cursor: pointer; border: 2px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e2e8f0; transition: all .2s ease; }
+    input[type="checkbox"] { min-width: auto; padding: 0; width: 20px; height: 20px; border-radius: 6px; vertical-align: middle; }
+    label.checkbox { display: inline-flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 2px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); min-height: 46px; }
+    select:focus, button:focus, input[type="checkbox"]:focus, label.checkbox:focus { outline: 3px solid #4299e1; outline-offset: 2px; border-color: #4299e1; }
+    select:hover, button:hover, label.checkbox:hover { background: rgba(255,255,255,.14); }
     .primary { width: 100%; margin-top: 10px; background: linear-gradient(45deg, #4299e1, #63b3ed); border: none; font-weight: 600; }
     .install { display: none; margin-top: 14px; padding: 12px 16px; background: rgba(66,153,225,.12); border: 1px solid #4299e1; border-radius: 10px; }
     .install.show { display: block; }
+
     .hud { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 900; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
     .hud.active { opacity: 1; pointer-events: auto; }
     .panel { background: rgba(0,0,0,.7); border: 1px solid rgba(255,255,255,.2); padding: 12px 16px; border-radius: 12px; min-width: 200px; }
@@ -41,10 +47,12 @@
     .group { display: flex; flex-wrap: wrap; gap: 8px; }
     .hud-btn { background: rgba(0,0,0,.7); border: 1px solid rgba(255,255,255,.22); color: #e2e8f0; padding: 10px 14px; border-radius: 10px; min-width: 44px; min-height: 44px; cursor: pointer; transition: all .2s ease; }
     .hud-btn:hover { background: rgba(66,153,225,.25); border-color: #4299e1; }
+
     .complete { position: fixed; inset: 0; display: grid; place-items: center; z-index: 1200; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
     .complete.show { opacity: 1; pointer-events: auto; }
     .xr { position: fixed; inset: 0; opacity: 0; transition: opacity .4s ease; }
     .xr.active { opacity: 1; }
+
     @media (max-width: 620px) { .panel { min-width: 160px; } h1 { font-size: 1.9rem; } }
   </style>
 </head>
@@ -67,8 +75,16 @@
             <option value="15">15 min</option>
           </select>
         </div>
+        <div class="row small" style="justify-content:center;margin-top:10px;">
+          <label class="checkbox" for="useMic">
+            <input type="checkbox" id="useMic" />
+            <span>Use microphone (breath-responsive)</span>
+          </label>
+        </div>
+        <div class="hint" id="micHint" style="display:none;">Tip: Hold the headset mic 2–3 cm from your mouth. Gentle “haa” breaths register best.</div>
       </div>
       <button id="start" class="primary" aria-label="Start breathing session">Start Breathing Session</button>
+
       <div id="installBanner" class="install">
         <div>Install Calm Breathing for the best experience.</div>
         <div style="margin-top:8px; display:flex; gap:8px; justify-content:center;">
@@ -137,7 +153,7 @@
   </div>
 
   <script>
-    // Lightweight look-at to avoid an external dependency.
+    // Lightweight look-at
     if (window.AFRAME) {
       AFRAME.registerComponent('look-at', {
         schema: { default: '#camera' },
@@ -168,7 +184,11 @@
           tSession: 0,
           tTotal: 0,
           last: 0,
-          muted: (localStorage.getItem('cb_muted') === '1')
+          muted: (localStorage.getItem('cb_muted') === '1'),
+          micRequested: false,
+          micEnabled: false,
+          micReady: false,
+          micCalibrating: false
         };
 
         this.patterns = {
@@ -176,11 +196,25 @@
           '478': { inhale: 4, hold1: 7, exhale: 8 }
         };
 
+        this.audio = {
+          ctx: null,
+          analyser: null,
+          source: null,
+          stream: null,
+          buf: null,
+          rms: 0,
+          ema: 0,
+          baseline: 0.012, // sensible defaults, refined by calibration
+          peak: 0.06
+        };
+
         this.ui = {
           landing: document.getElementById('landing'),
           start: document.getElementById('start'),
           mode: document.getElementById('mode'),
           length: document.getElementById('length'),
+          useMic: document.getElementById('useMic'),
+          micHint: document.getElementById('micHint'),
           installBanner: document.getElementById('installBanner'),
           installBtn: document.getElementById('installBtn'),
           installLater: document.getElementById('installLater'),
@@ -207,7 +241,6 @@
         this.registerSW();
         this.wireInstallPrompt();
 
-        // Initialize button states correctly on load.
         this.ui.muteBtn.textContent = this.state.muted ? '🔇' : '🔊';
         this.ui.pauseBtn.textContent = '⏸️';
       }
@@ -215,14 +248,18 @@
       bind() {
         this.ui.mode.addEventListener('change', e => this.state.mode = e.target.value);
         this.ui.length.addEventListener('change', e => this.state.durationMin = parseInt(e.target.value, 10));
+        this.ui.useMic.addEventListener('change', e => {
+          const enabled = !!e.target.checked;
+          this.state.micRequested = enabled;
+          this.ui.micHint.style.display = enabled ? 'block' : 'none';
+        });
 
         this.ui.start.addEventListener('click', () => this.startSession());
         this.ui.pauseBtn.addEventListener('click', () => this.togglePause());
         this.ui.resetBtn.addEventListener('click', () => this.resetSession());
         this.ui.muteBtn.addEventListener('click', () => this.toggleMute());
         this.ui.exitVrBtn.addEventListener('click', () => {
-          const s = this.ui.scene;
-          if (s && s.exitVR) s.exitVR();
+          const s = this.ui.scene; if (s && s.exitVR) s.exitVR();
         });
         this.ui.restart.addEventListener('click', () => this.startSession());
         this.ui.home.addEventListener('click', () => this.goHome());
@@ -234,9 +271,12 @@
           if (e.code === 'Escape') { e.preventDefault(); this.goHome(); }
         });
 
-        // Show/hide Exit VR button reliably
         this.ui.scene.addEventListener('enter-vr', () => this.ui.exitVrBtn.style.display = 'block');
         this.ui.scene.addEventListener('exit-vr', () => this.ui.exitVrBtn.style.display = 'none');
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) this.state.isPaused = true;
+        });
       }
 
       registerSW() {
@@ -251,7 +291,6 @@
           this.deferInstallPrompt = e;
           this.ui.installBanner.classList.add('show');
         });
-
         this.ui.installBtn?.addEventListener('click', async () => {
           if (!this.deferInstallPrompt) return;
           this.deferInstallPrompt.prompt();
@@ -259,14 +298,75 @@
           this.deferInstallPrompt = null;
           this.ui.installBanner.classList.remove('show');
         });
+        this.ui.installLater?.addEventListener('click', () => this.ui.installBanner.classList.remove('show'));
+        window.addEventListener('appinstalled', () => this.ui.installBanner.classList.remove('show'));
+      }
 
-        this.ui.installLater?.addEventListener('click', () =>
-          this.ui.installBanner.classList.remove('show')
-        );
+      async setupMic() {
+        try {
+          if (!this.audio.ctx) {
+            this.audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (this.audio.ctx.state === 'suspended') {
+            await this.audio.ctx.resume();
+          }
+          this.audio.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+          this.audio.source = this.audio.ctx.createMediaStreamSource(this.audio.stream);
+          this.audio.analyser = this.audio.ctx.createAnalyser();
+          this.audio.analyser.fftSize = 2048;
+          this.audio.analyser.smoothingTimeConstant = 0.8;
+          this.audio.buf = new Float32Array(this.audio.analyser.fftSize);
+          this.audio.source.connect(this.audio.analyser);
 
-        window.addEventListener('appinstalled', () =>
-          this.ui.installBanner.classList.remove('show')
-        );
+          this.state.micEnabled = true;
+          this.state.micReady = true;
+          return true;
+        } catch (err) {
+          console.warn('Microphone error:', err);
+          this.state.micEnabled = false;
+          this.state.micReady = false;
+          return false;
+        }
+      }
+
+      computeRMS() {
+        if (!this.audio.analyser) return 0;
+        this.audio.analyser.getFloatTimeDomainData(this.audio.buf);
+        let sum = 0;
+        for (let i = 0; i < this.audio.buf.length; i++) {
+          const v = this.audio.buf[i];
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / this.audio.buf.length);
+        // Exponential moving average for stability
+        this.audio.ema = this.audio.ema ? (this.audio.ema * 0.9 + rms * 0.1) : rms;
+        return this.audio.ema;
+      }
+
+      startCalibration(durationMs = 2000) {
+        this.state.micCalibrating = true;
+        this.audio.baseline = 1e9;
+        this.audio.peak = 0;
+
+        const startT = performance.now();
+        const step = () => {
+          if (!this.state.sessionActive || !this.state.micEnabled) return;
+          const now = performance.now();
+          const v = this.computeRMS();
+          this.audio.baseline = Math.min(this.audio.baseline, v);
+          this.audio.peak = Math.max(this.audio.peak, v);
+          if (now - startT < durationMs) {
+            requestAnimationFrame(step);
+          } else {
+            // Guardrail: ensure a usable range
+            const minRange = 0.01;
+            if (this.audio.peak - this.audio.baseline < minRange) {
+              this.audio.peak = this.audio.baseline + minRange;
+            }
+            this.state.micCalibrating = false;
+          }
+        };
+        step();
       }
 
       startSession() {
@@ -284,12 +384,27 @@
         this.ui.hud.classList.add('active');
         this.ui.complete.classList.remove('show');
 
-        this.updateHUD('Get Ready');
+        const micWanted = !!this.ui.useMic.checked;
 
-        // Small prep window, then begin pattern
+        if (micWanted) {
+          this.ui.micHint.style.display = 'block';
+          this.updateHUD('Calibrating mic…');
+          this.setupMic().then(ok => {
+            if (ok) {
+              this.startCalibration(2000); // runs during the prepare window
+            } else {
+              this.updateHUD('Mic blocked. Falling back to timer.');
+            }
+          });
+        } else {
+          this.ui.micHint.style.display = 'none';
+        }
+
+        // After a short prepare window, begin loop
         setTimeout(() => {
           if (!this.state.sessionActive) return;
-          this.state.currentPhase = 'inhale';
+          // Mic mode does not use phases, but we keep the label concise.
+          this.state.currentPhase = micWanted && this.state.micReady ? 'mic' : 'inhale';
           this.state.tPhase = 0;
           this.last = performance.now();
           this.loop();
@@ -314,31 +429,31 @@
           return;
         }
 
-        const pattern = this.patterns[this.state.mode];
-        // Unknown phases (e.g., prepare) get 0 duration so they won’t advance until we set them.
-        const durSec = pattern[this.state.currentPhase];
-        const durMs = (durSec || 0) * 1000;
-
-        if (durMs > 0 && this.state.tPhase >= durMs) {
-          this.nextPhase();
+        // Decide animation path
+        if (this.state.currentPhase === 'mic' && this.state.micEnabled && this.state.micReady) {
+          this.animateSpheresMic();
+          this.updateHUDMic();
+        } else {
+          const pattern = this.patterns[this.state.mode];
+          const durSec = pattern[this.state.currentPhase];
+          const durMs = (durSec || 0) * 1000;
+          if (durMs > 0 && this.state.tPhase >= durMs) this.nextPhase();
+          const intensity = durMs > 0 ? Math.min(this.state.tPhase / durMs, 1) : 1;
+          this.animateSpheresPattern(intensity);
+          this.updateHUD();
         }
-
-        const intensity = durMs > 0 ? Math.min(this.state.tPhase / durMs, 1) : 1;
-        this.animateSpheres(intensity);
-        this.updateHUD();
       }
 
       nextPhase() {
         const phases = (this.state.mode === 'box')
           ? ['inhale', 'hold1', 'exhale', 'hold2']
           : ['inhale', 'hold1', 'exhale'];
-
         const idx = phases.indexOf(this.state.currentPhase);
         this.state.currentPhase = phases[(idx + 1) % phases.length];
         this.state.tPhase = 0;
       }
 
-      animateSpheres(intensity) {
+      animateSpheresPattern(intensity) {
         const phase = this.state.currentPhase;
         let target = 1, emissive = 0.3;
 
@@ -346,6 +461,24 @@
         else if (phase === 'hold1' || phase === 'hold2') { target = 1.8; emissive = 0.7; }
         else if (phase === 'exhale') { target = 1.8 - 0.8 * intensity; emissive = 0.7 - 0.4 * intensity; }
 
+        this.applyVisuals(target, emissive);
+        const labelMap = { prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' };
+        this.ui.pLabel && this.ui.pLabel.setAttribute('value', labelMap[phase] || 'Breathe');
+      }
+
+      animateSpheresMic() {
+        const v = this.computeRMS();
+        // Normalize using calibration
+        const norm = Math.max(0, Math.min(1, (v - this.audio.baseline) / (this.audio.peak - this.audio.baseline)));
+        // Gentle easing
+        const eased = norm * norm;
+        const target = 1 + 0.9 * eased;      // 1.0 to ~1.9
+        const emissive = 0.3 + 0.5 * eased;  // 0.3 to 0.8
+        this.applyVisuals(target, emissive);
+        this.ui.pLabel && this.ui.pLabel.setAttribute('value', 'Breathe');
+      }
+
+      applyVisuals(target, emissive) {
         const lerp = (a, b, t) => a + (b - a) * t;
         const apply = (el, factor) => {
           if (!el || !el.object3D) return;
@@ -353,16 +486,11 @@
           const goal = target * factor;
           const nx = lerp(s.x, goal, 0.15);
           s.set(nx, nx, nx);
-          // Update only the property we need; do not replace the whole material definition.
           el.setAttribute('material', 'emissiveIntensity', emissive);
         };
-
         apply(this.ui.s1, 0.9);
         apply(this.ui.s2, 1.0);
         apply(this.ui.s3, 1.1);
-
-        const labelMap = { prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' };
-        this.ui.pLabel && this.ui.pLabel.setAttribute('value', labelMap[phase] || 'Breathe');
       }
 
       updateHUD(prepText) {
@@ -373,11 +501,22 @@
         }
         const label = ({ prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' })[this.state.currentPhase] || 'Breathe';
         this.ui.phaseText.textContent = label;
-
         const remain = Math.max(0, this.state.tTotal - this.state.tSession);
         const m = Math.floor(remain / 60000);
         const s = Math.floor((remain % 60000) / 1000).toString().padStart(2, '0');
         this.ui.timeText.textContent = `${m}:${s} remaining`;
+      }
+
+      updateHUDMic() {
+        this.ui.phaseText.textContent = this.state.micCalibrating ? 'Calibrating' : 'Breathe';
+        const remain = Math.max(0, this.state.tTotal - this.state.tSession);
+        const m = Math.floor(remain / 60000);
+        const s = Math.floor((remain % 60000) / 1000).toString().padStart(2, '0');
+        if (this.state.micCalibrating) {
+          this.ui.timeText.textContent = `Mic calibration… ${m}:${s} total`;
+        } else {
+          this.ui.timeText.textContent = `${m}:${s} remaining • Mic`;
+        }
       }
 
       togglePause() {
@@ -390,19 +529,36 @@
         this.state.muted = !this.state.muted;
         localStorage.setItem('cb_muted', this.state.muted ? '1' : '0');
         this.ui.muteBtn.textContent = this.state.muted ? '🔇' : '🔊';
-        // Placeholder: route through your audio system if/when you add sound.
+        // Placeholder for future audio cues.
       }
 
       resetSession() {
         this.state.sessionActive = false;
         this.state.sessionDone = false;
+        this.teardownMic();
         this.goHome();
       }
 
       finish() {
         this.state.sessionDone = true;
         this.state.sessionActive = false;
+        this.teardownMic();
         this.ui.complete.classList.add('show');
+      }
+
+      teardownMic() {
+        try {
+          if (this.audio.stream) {
+            this.audio.stream.getTracks().forEach(t => t.stop());
+          }
+        } catch {}
+        this.audio.stream = null;
+        this.audio.source = null;
+        this.audio.analyser = null;
+        this.audio.buf = null;
+        this.state.micEnabled = false;
+        this.state.micReady = false;
+        this.state.micCalibrating = false;
       }
 
       goHome() {
@@ -411,7 +567,6 @@
         this.ui.complete.classList.remove('show');
         this.ui.landing.classList.remove('hidden');
 
-        // Reset sphere visuals without nuking other material settings.
         ['s1','s2','s3'].forEach(id => {
           const el = this.ui[id];
           if (!el || !el.object3D) return;
@@ -428,4 +583,3 @@
   </script>
 </body>
 </html>
-
