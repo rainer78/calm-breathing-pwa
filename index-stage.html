@@ -87,7 +87,7 @@
     <div class="group">
       <button class="hud-btn" id="pauseBtn" aria-label="Pause">⏸️</button>
       <button class="hud-btn" id="resetBtn" aria-label="Reset">🔄</button>
-      <button class="hud-btn" id="muteBtn" aria-label="Toggle audio" style="display:none;">🔇</button>
+      <button class="hud-btn" id="muteBtn" aria-label="Toggle audio">🔇</button>
       <button class="hud-btn" id="exitVrBtn" aria-label="Exit VR" style="display:none;">👓</button>
     </div>
   </div>
@@ -114,159 +114,134 @@
       <a-light type="directional" position="2 4 5" color="#4299e1" intensity="0.35"></a-light>
       <a-sky color="#0b1020"></a-sky>
 
-      <!-- Floating spheres -->
       <a-sphere id="s1" position="-2 1.5 -4" radius="0.5"
-                material="color: #4299e1; emissive: #1a365d; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
-                animation__float="property: position; to: -2 2 -4; dur: 4000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-      <a-sphere id="s2" position="0 1.8 -5" radius="0.7"
-                material="color: #63b3ed; emissive: #1b3a64; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
-                animation__float="property: position; to: 0 2.3 -5; dur: 5000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-      <a-sphere id="s3" position="2.5 1.2 -3.5" radius="0.4"
-                material="color: #7fb7ff; emissive: #1d3f6e; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
-                animation__float="property: position; to: 2.5 1.7 -3.5; dur: 3500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+        material="color: #4299e1; emissive: #1a365d; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+        animation__float="property: position; to: -2 2 -4; dur: 4000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
 
-      <!-- Phase label + pacer ring -->
+      <a-sphere id="s2" position="0 1.8 -5" radius="0.7"
+        material="color: #63b3ed; emissive: #1b3a64; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+        animation__float="property: position; to: 0 2.3 -5; dur: 5000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+
+      <a-sphere id="s3" position="2.5 1.2 -3.5" radius="0.4"
+        material="color: #7fb7ff; emissive: #1d3f6e; emissiveIntensity: 0.3; metalness: 0.1; roughness: 0.4"
+        animation__float="property: position; to: 2.5 1.7 -3.5; dur: 3500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+
       <a-entity id="phaseBillboard" position="0 3 -4" look-at="#camera">
-        <a-plane width="2.0" height="0.6" color="#000000" opacity="0.45"></a-plane>
-        <a-text id="phaseLabel" value="Breathe" align="center" color="#e2e8f0" position="0 0.12 0.01"></a-text>
-        <a-entity id="pacer" position="0 -0.18 0.02"
-                  geometry="primitive: ring; radiusInner: 0.18; radiusOuter: 0.21; thetaLength: 0; thetaStart: 0"
-                  material="color: #63b3ed; shader: flat"></a-entity>
+        <a-plane width="2.0" height="0.5" color="#000000" opacity="0.5"></a-plane>
+        <a-text id="phaseLabel" value="Breathe" align="center" color="#e2e8f0" position="0 0 0.01"></a-text>
       </a-entity>
 
-      <a-camera id="camera" position="0 1.6 0" wasd-controls="enabled: false" look-controls="enabled: true"></a-camera>
+      <a-camera id="camera" position="0 1.6 0"
+        wasd-controls="enabled: true" look-controls="enabled: true"></a-camera>
     </a-scene>
   </div>
 
   <script>
-    // Safe look-at component that uses world positions
+    // Lightweight look-at to avoid an external dependency.
     if (window.AFRAME) {
       AFRAME.registerComponent('look-at', {
         schema: { default: '#camera' },
-        init: function () { this.target3D = null; this.tmp = new THREE.Vector3(); },
+        init: function () { this.target = null; this._vec3 = new THREE.Vector3(); },
         tick: function () {
-          if (!this.target3D) {
+          if (!this.target) {
             const el = document.querySelector(this.data);
-            this.target3D = el && el.object3D;
+            this.target = el && el.object3D;
           }
-          if (!this.target3D) return;
-          this.target3D.getWorldPosition(this.tmp);
-          this.el.object3D.lookAt(this.tmp);
+          if (this.target) {
+            this.target.getWorldPosition(this._vec3);
+            this.el.object3D.lookAt(this._vec3);
+          }
         }
       });
-    }
-
-    // Microphone envelope for breath-reactive visuals, with restart safety
-    class BreathSignal {
-      constructor() {
-        this.ctx = null; this.analyser = null; this.buf = null;
-        this.level = 0; this.confidence = 0;
-        this._ema = 0; this._noise = 0.02;
-        this._running = false; this._stream = null;
-      }
-      async start() {
-        if (this._running) return;
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Mic not available');
-        const AC = window.AudioContext || window.webkitAudioContext;
-        this.ctx = this.ctx || new AC();
-        if (this.ctx.state === 'suspended') await this.ctx.resume();
-
-        if (this._stream) { this._stream.getTracks().forEach(t => t.stop()); this._stream = null; }
-
-        this._stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-        });
-        const src = this.ctx.createMediaStreamSource(this._stream);
-        this.analyser = this.analyser || this.ctx.createAnalyser();
-        this.analyser.fftSize = 2048;
-        src.connect(this.analyser);
-        this.buf = this.buf || new Float32Array(this.analyser.fftSize);
-        this._running = true;
-        this._tick();
-      }
-      stop() {
-        this._running = false;
-        if (this._stream) { this._stream.getTracks().forEach(t => t.stop()); this._stream = null; }
-      }
-      _tick() {
-        if (!this._running) return;
-        this.analyser.getFloatTimeDomainData(this.buf);
-        let sum = 0; for (let i=0;i<this.buf.length;i++){ const v = this.buf[i]; sum += v*v; }
-        const rms = Math.sqrt(sum / this.buf.length);
-        this._ema = 0.9*this._ema + 0.1*rms;
-        const norm = Math.max(0, (this._ema - this._noise) * 18.0);
-        this.level = Math.min(1, norm);
-        this.confidence = Math.max(0, Math.min(1, (this._ema - this._noise) * 40));
-        setTimeout(()=>this._tick(), 16);
-      }
     }
 
     class CalmBreathingApp {
       constructor() {
         this.state = {
-          mode: 'box', durationMin: 5, currentPhase: 'prepare',
-          isPaused: false, sessionActive: false, sessionDone: false,
-          tPhase: 0, tSession: 0, tTotal: 0, last: 0,
+          mode: 'box',
+          durationMin: 5,
+          currentPhase: 'prepare',
+          isPaused: false,
+          sessionActive: false,
+          sessionDone: false,
+          tPhase: 0,
+          tSession: 0,
+          tTotal: 0,
+          last: 0,
           muted: (localStorage.getItem('cb_muted') === '1')
         };
+
         this.patterns = {
           box: { inhale: 4, hold1: 4, exhale: 4, hold2: 4 },
           '478': { inhale: 4, hold1: 7, exhale: 8 }
         };
-        this.ui = {
-          landing: document.getElementById('landing'), start: document.getElementById('start'),
-          mode: document.getElementById('mode'), length: document.getElementById('length'),
-          installBanner: document.getElementById('installBanner'), installBtn: document.getElementById('installBtn'), installLater: document.getElementById('installLater'),
-          hud: document.getElementById('hud'), phaseText: document.getElementById('phaseText'), timeText: document.getElementById('timeText'),
-          pauseBtn: document.getElementById('pauseBtn'), resetBtn: document.getElementById('resetBtn'), muteBtn: document.getElementById('muteBtn'), exitVrBtn: document.getElementById('exitVrBtn'),
-          complete: document.getElementById('complete'), restart: document.getElementById('restartBtn'), home: document.getElementById('homeBtn'),
-          xr: document.getElementById('xr'), scene: document.getElementById('scene'),
-          pLabel: document.getElementById('phaseLabel'), pacer: document.getElementById('pacer'),
-          phaseBillboard: document.getElementById('phaseBillboard'),
-          s1: document.getElementById('s1'), s2: document.getElementById('s2'), s3: document.getElementById('s3')
-        };
-        this.breath = new BreathSignal();
-        this.useBio = false;
-        this.deferInstallPrompt = null;
 
+        this.ui = {
+          landing: document.getElementById('landing'),
+          start: document.getElementById('start'),
+          mode: document.getElementById('mode'),
+          length: document.getElementById('length'),
+          installBanner: document.getElementById('installBanner'),
+          installBtn: document.getElementById('installBtn'),
+          installLater: document.getElementById('installLater'),
+          hud: document.getElementById('hud'),
+          phaseText: document.getElementById('phaseText'),
+          timeText: document.getElementById('timeText'),
+          pauseBtn: document.getElementById('pauseBtn'),
+          resetBtn: document.getElementById('resetBtn'),
+          muteBtn: document.getElementById('muteBtn'),
+          exitVrBtn: document.getElementById('exitVrBtn'),
+          complete: document.getElementById('complete'),
+          restart: document.getElementById('restartBtn'),
+          home: document.getElementById('homeBtn'),
+          xr: document.getElementById('xr'),
+          scene: document.getElementById('scene'),
+          pLabel: document.getElementById('phaseLabel'),
+          s1: document.getElementById('s1'),
+          s2: document.getElementById('s2'),
+          s3: document.getElementById('s3')
+        };
+
+        this.deferInstallPrompt = null;
         this.bind();
         this.registerSW();
         this.wireInstallPrompt();
 
-        // Hide Mute until you add audio cues
-        this.ui.muteBtn.style.display = 'none';
-
-        // Ensure billboard binds to the component even if registration was late
-        if (window.AFRAME && AFRAME.components && AFRAME.components['look-at'] && this.ui.phaseBillboard) {
-          this.ui.phaseBillboard.setAttribute('look-at', '#camera');
-        }
+        // Initialize button states correctly on load.
+        this.ui.muteBtn.textContent = this.state.muted ? '🔇' : '🔊';
+        this.ui.pauseBtn.textContent = '⏸️';
       }
 
       bind() {
         this.ui.mode.addEventListener('change', e => this.state.mode = e.target.value);
         this.ui.length.addEventListener('change', e => this.state.durationMin = parseInt(e.target.value, 10));
+
         this.ui.start.addEventListener('click', () => this.startSession());
         this.ui.pauseBtn.addEventListener('click', () => this.togglePause());
         this.ui.resetBtn.addEventListener('click', () => this.resetSession());
         this.ui.muteBtn.addEventListener('click', () => this.toggleMute());
-        this.ui.exitVrBtn.addEventListener('click', () => { const s = this.ui.scene; if (s && s.exitVR) s.exitVR(); });
+        this.ui.exitVrBtn.addEventListener('click', () => {
+          const s = this.ui.scene;
+          if (s && s.exitVR) s.exitVR();
+        });
         this.ui.restart.addEventListener('click', () => this.startSession());
         this.ui.home.addEventListener('click', () => this.goHome());
 
         document.addEventListener('keydown', (e) => {
           if (!this.state.sessionActive) return;
           if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
-          if (e.code === 'KeyR')  { e.preventDefault(); this.resetSession(); }
-          if (e.code === 'Escape'){ e.preventDefault(); this.goHome(); }
+          if (e.code === 'KeyR') { e.preventDefault(); this.resetSession(); }
+          if (e.code === 'Escape') { e.preventDefault(); this.goHome(); }
         });
 
+        // Show/hide Exit VR button reliably
         this.ui.scene.addEventListener('enter-vr', () => this.ui.exitVrBtn.style.display = 'block');
-        this.ui.scene.addEventListener('exit-vr',  () => this.ui.exitVrBtn.style.display = 'none');
+        this.ui.scene.addEventListener('exit-vr', () => this.ui.exitVrBtn.style.display = 'none');
       }
 
       registerSW() {
         if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('./sw.js').catch(()=>{});
+          navigator.serviceWorker.register('./sw.js').catch(console.error);
         }
       }
 
@@ -276,50 +251,49 @@
           this.deferInstallPrompt = e;
           this.ui.installBanner.classList.add('show');
         });
-        this.ui.installBtn.addEventListener('click', async () => {
+
+        this.ui.installBtn?.addEventListener('click', async () => {
           if (!this.deferInstallPrompt) return;
           this.deferInstallPrompt.prompt();
           await this.deferInstallPrompt.userChoice;
           this.deferInstallPrompt = null;
           this.ui.installBanner.classList.remove('show');
         });
-        this.ui.installLater.addEventListener('click', () => this.ui.installBanner.classList.remove('show'));
-        window.addEventListener('appinstalled', () => this.ui.installBanner.classList.remove('show'));
+
+        this.ui.installLater?.addEventListener('click', () =>
+          this.ui.installBanner.classList.remove('show')
+        );
+
+        window.addEventListener('appinstalled', () =>
+          this.ui.installBanner.classList.remove('show')
+        );
       }
 
-      changePhase(phase) {
-        this.state.currentPhase = phase;
-        this.state.tPhase = 0;
-        const label = ({ inhale:'Inhale', hold1:'Hold', exhale:'Exhale', hold2:'Hold', prepare:'Get Ready' })[phase] || 'Breathe';
-        if (this.ui.pLabel) this.ui.pLabel.setAttribute('value', label);
-      }
-
-      async startSession() {
-        // Fresh start
-        this.breath.stop();
-        this.useBio = false;
-        try { await this.breath.start(); this.useBio = true; } catch { this.useBio = false; }
-
+      startSession() {
         this.state.sessionActive = true;
         this.state.sessionDone = false;
-        this.changePhase('prepare');
+        this.state.currentPhase = 'prepare';
+        this.state.tPhase = 0;
         this.state.tSession = 0;
-        this.state.tTotal   = this.state.durationMin * 60 * 1000;
+        this.state.tTotal = this.state.durationMin * 60 * 1000;
         this.state.isPaused = false;
-        this.state.last = performance.now();
+        this.last = performance.now();
 
         this.ui.landing.classList.add('hidden');
         this.ui.xr.classList.add('active');
         this.ui.hud.classList.add('active');
         this.ui.complete.classList.remove('show');
+
         this.updateHUD('Get Ready');
 
+        // Small prep window, then begin pattern
         setTimeout(() => {
           if (!this.state.sessionActive) return;
-          this.changePhase('inhale');
-          this.state.last = performance.now();
+          this.state.currentPhase = 'inhale';
+          this.state.tPhase = 0;
+          this.last = performance.now();
           this.loop();
-        }, 2000);
+        }, 3000);
       }
 
       loop = () => {
@@ -327,85 +301,77 @@
         requestAnimationFrame(this.loop);
 
         const now = performance.now();
-        const dt = now - this.state.last;
-        this.state.last = now;
+        const dt = now - this.last;
+        this.last = now;
 
         if (this.state.isPaused || this.state.sessionDone) return;
 
-        const clamped = Math.min(dt, 100); // guard against tab stalls
-        this.state.tSession += clamped;
-        this.state.tPhase   += clamped;
+        this.state.tSession += dt;
+        this.state.tPhase += dt;
 
-        if (this.state.tSession >= this.state.tTotal) { this.finish(); return; }
+        if (this.state.tSession >= this.state.tTotal) {
+          this.finish();
+          return;
+        }
 
         const pattern = this.patterns[this.state.mode];
+        // Unknown phases (e.g., prepare) get 0 duration so they won’t advance until we set them.
         const durSec = pattern[this.state.currentPhase];
-        const durMs  = (durSec || 0) * 1000;
+        const durMs = (durSec || 0) * 1000;
 
         if (durMs > 0 && this.state.tPhase >= durMs) {
           this.nextPhase();
         }
 
-        const phaseIntensity = durMs > 0 ? Math.min(this.state.tPhase / durMs, 1) : 1;
-
-        const bioOK = this.useBio && this.breath.confidence > 0.35;
-        const bio   = bioOK ? this.breath.level : null;
-        const intensity = bio != null ? Math.min(1, 0.6 * phaseIntensity + 0.4 * bio) : phaseIntensity;
-
+        const intensity = durMs > 0 ? Math.min(this.state.tPhase / durMs, 1) : 1;
         this.animateSpheres(intensity);
-        this.updatePacer(phaseIntensity, durMs > 0);
         this.updateHUD();
       }
 
       nextPhase() {
-        const order = (this.state.mode === 'box')
-          ? ['inhale','hold1','exhale','hold2']
-          : ['inhale','hold1','exhale'];
-        const idx = order.indexOf(this.state.currentPhase);
-        this.changePhase(order[(idx + 1) % order.length]);
+        const phases = (this.state.mode === 'box')
+          ? ['inhale', 'hold1', 'exhale', 'hold2']
+          : ['inhale', 'hold1', 'exhale'];
+
+        const idx = phases.indexOf(this.state.currentPhase);
+        this.state.currentPhase = phases[(idx + 1) % phases.length];
+        this.state.tPhase = 0;
       }
 
       animateSpheres(intensity) {
         const phase = this.state.currentPhase;
-        let base = 1, emissive = 0.3;
-        if (phase === 'inhale') { base = 1 + 0.8 * intensity; emissive = 0.3 + 0.4 * intensity; }
-        else if (phase === 'hold1' || phase === 'hold2') { base = 1.8; emissive = 0.7; }
-        else if (phase === 'exhale') { base = 1.8 - 0.8 * intensity; emissive = 0.7 - 0.4 * intensity; }
+        let target = 1, emissive = 0.3;
+
+        if (phase === 'inhale') { target = 1 + 0.8 * intensity; emissive = 0.3 + 0.4 * intensity; }
+        else if (phase === 'hold1' || phase === 'hold2') { target = 1.8; emissive = 0.7; }
+        else if (phase === 'exhale') { target = 1.8 - 0.8 * intensity; emissive = 0.7 - 0.4 * intensity; }
 
         const lerp = (a, b, t) => a + (b - a) * t;
         const apply = (el, factor) => {
-          if (!el) return;
+          if (!el || !el.object3D) return;
           const s = el.object3D.scale;
-          const goal = base * factor;
+          const goal = target * factor;
           const nx = lerp(s.x, goal, 0.15);
           s.set(nx, nx, nx);
-
-          const mesh = el.getObject3D('mesh');
-          if (mesh && mesh.material && 'emissiveIntensity' in mesh.material) {
-            mesh.material.emissiveIntensity = emissive;
-          } else {
-            // Fallback if mesh not ready yet
-            el.setAttribute('material', 'emissiveIntensity', emissive);
-          }
+          // Update only the property we need; do not replace the whole material definition.
+          el.setAttribute('material', 'emissiveIntensity', emissive);
         };
+
         apply(this.ui.s1, 0.9);
         apply(this.ui.s2, 1.0);
         apply(this.ui.s3, 1.1);
-      }
 
-      updatePacer(intensity, hasDur) {
-        if (!this.ui.pacer) return;
-        const deg = hasDur ? Math.max(1, Math.floor(intensity * 360)) : 0;
-        this.ui.pacer.setAttribute('geometry', 'thetaLength', deg);
+        const labelMap = { prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' };
+        this.ui.pLabel && this.ui.pLabel.setAttribute('value', labelMap[phase] || 'Breathe');
       }
 
       updateHUD(prepText) {
         if (prepText) {
           this.ui.phaseText.textContent = 'Preparing';
-          this.ui.timeText.textContent  = prepText;
+          this.ui.timeText.textContent = prepText;
           return;
         }
-        const label = ({ prepare:'Get Ready', inhale:'Inhale', hold1:'Hold', exhale:'Exhale', hold2:'Hold' })[this.state.currentPhase] || 'Breathe';
+        const label = ({ prepare: 'Get Ready', inhale: 'Inhale', hold1: 'Hold', exhale: 'Exhale', hold2: 'Hold' })[this.state.currentPhase] || 'Breathe';
         this.ui.phaseText.textContent = label;
 
         const remain = Math.max(0, this.state.tTotal - this.state.tSession);
@@ -417,11 +383,14 @@
       togglePause() {
         this.state.isPaused = !this.state.isPaused;
         this.ui.pauseBtn.textContent = this.state.isPaused ? '▶️' : '⏸️';
-        if (!this.state.isPaused) this.state.last = performance.now();
+        if (!this.state.isPaused) this.last = performance.now();
       }
 
       toggleMute() {
-        // Placeholder. Hidden until audio cues are added.
+        this.state.muted = !this.state.muted;
+        localStorage.setItem('cb_muted', this.state.muted ? '1' : '0');
+        this.ui.muteBtn.textContent = this.state.muted ? '🔇' : '🔊';
+        // Placeholder: route through your audio system if/when you add sound.
       }
 
       resetSession() {
@@ -437,32 +406,21 @@
       }
 
       goHome() {
-        this.breath.stop();
-
         this.ui.hud.classList.remove('active');
         this.ui.xr.classList.remove('active');
         this.ui.complete.classList.remove('show');
         this.ui.landing.classList.remove('hidden');
 
-        const resetEl = (el) => {
-          if (!el) return;
+        // Reset sphere visuals without nuking other material settings.
+        ['s1','s2','s3'].forEach(id => {
+          const el = this.ui[id];
+          if (!el || !el.object3D) return;
           el.object3D.scale.set(1,1,1);
-          const mesh = el.getObject3D('mesh');
-          if (mesh && mesh.material && 'emissiveIntensity' in mesh.material) {
-            mesh.material.emissiveIntensity = 0.3;
-          } else {
-            el.setAttribute('material', 'emissiveIntensity', 0.3);
-          }
-        };
-        resetEl(this.ui.s1);
-        resetEl(this.ui.s2);
-        resetEl(this.ui.s3);
+          el.setAttribute('material', 'emissiveIntensity', 0.3);
+        });
 
-        if (this.ui.pacer) {
-          this.ui.pacer.setAttribute('geometry', 'thetaLength', 0);
-        }
         this.ui.phaseText.textContent = 'Preparing…';
-        this.ui.timeText.textContent  = 'Get ready';
+        this.ui.timeText.textContent = 'Get ready';
       }
     }
 
@@ -470,3 +428,4 @@
   </script>
 </body>
 </html>
+
